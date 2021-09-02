@@ -25,6 +25,26 @@ var (
 
 }*/
 
+func getDb() *gorm.DB {
+
+	//配置MySQL连接参数
+	username := "root"      //账号
+	password := "root1122." //密码
+	host := "127.0.0.1"     //数据库地址，可以是Ip或者域名
+	port := 3306            //数据库端口
+	Dbname := "chapter8"    //数据库名
+	timeout := "10s"        //连接超时，10秒
+
+	//拼接下dsn参数, dsn格式可以参考上面的语法，这里使用Sprintf动态拼接dsn参数，因为一般数据库连接参数，我们都是保存在配置文件里面，需要从配置文件加载参数，然后拼接dsn。
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8&parseTime=True&loc=Local&timeout=%s", username, password, host, port, Dbname, timeout)
+	//连接MYSQL, 获得DB类型实例，用于后面的数据库读写操作。
+	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
+	if err != nil {
+		panic("连接数据库失败, error=" + err.Error())
+	}
+	return db
+}
+
 func main() {
 	router := gin.Default()
 	v2 := router.Group("/api/v2/user")
@@ -53,6 +73,11 @@ type (
 		Phone string `json:"phone"`
 		Name  string `json:"name"`
 	}
+
+	UserReq struct {
+		Phone string `json:"phone" form:"phone"`
+		Name  string `json:"name" form:"name"`
+	}
 )
 
 //md5加密
@@ -64,20 +89,23 @@ func md5Password(str string) string {
 
 // 创建新用户
 func createUser(c *gin.Context) {
-	phone := c.PostForm("phone") //获取POST请求参数phone
+	/*phone := c.PostForm("phone") //获取POST请求参数phone
 	name := c.PostForm("name")   //获取POST请求参数name
 	user := User{
 		Phone:    phone,
 		Name:     name,
 		Password: md5Password("666666"), //用户密码
-	}
-	db.Save(&user) //保存到数据库
+	}*/
+	u := UserReq{}
+	c.ShouldBind(&u)
+	db = getDb()
+	db.Create(u)
 	c.JSON(
 		http.StatusCreated,
 		gin.H{
 			"status":  http.StatusCreated,
 			"message": "User created successfully!",
-			"ID":      user.ID,
+			"ID":      "1",
 		}) //返回状态到客户端
 }
 
@@ -85,24 +113,24 @@ func createUser(c *gin.Context) {
 func fetchAllUser(c *gin.Context) {
 	var user []User        //定义一个数组去数据库总获取数据
 	var _userRes []UserRes //定义一个响应数组用户返回数据到客户端
+	/*
+		//配置MySQL连接参数
+		username := "root"      //账号
+		password := "root1122." //密码
+		host := "127.0.0.1"     //数据库地址，可以是Ip或者域名
+		port := 3306            //数据库端口
+		Dbname := "chapter8"    //数据库名
+		timeout := "10s"        //连接超时，10秒
 
-	//配置MySQL连接参数
-	username := "root"      //账号
-	password := "root1122." //密码
-	host := "127.0.0.1"     //数据库地址，可以是Ip或者域名
-	port := 3306            //数据库端口
-	Dbname := "chapter8"    //数据库名
-	timeout := "10s"        //连接超时，10秒
+		//拼接下dsn参数, dsn格式可以参考上面的语法，这里使用Sprintf动态拼接dsn参数，因为一般数据库连接参数，我们都是保存在配置文件里面，需要从配置文件加载参数，然后拼接dsn。
+		dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8&parseTime=True&loc=Local&timeout=%s", username, password, host, port, Dbname, timeout)
+		//连接MYSQL, 获得DB类型实例，用于后面的数据库读写操作。
+		db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
+		if err != nil {
+			panic("连接数据库失败, error=" + err.Error())
+		}*/
 
-	//拼接下dsn参数, dsn格式可以参考上面的语法，这里使用Sprintf动态拼接dsn参数，因为一般数据库连接参数，我们都是保存在配置文件里面，需要从配置文件加载参数，然后拼接dsn。
-	dsn := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?charset=utf8&parseTime=True&loc=Local&timeout=%s", username, password, host, port, Dbname, timeout)
-	//连接MYSQL, 获得DB类型实例，用于后面的数据库读写操作。
-	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
-	if err != nil {
-		panic("连接数据库失败, error=" + err.Error())
-	}
-
-	db.Find(&user)
+	getDb().Find(&user)
 
 	if len(user) <= 0 {
 		c.JSON(
@@ -134,7 +162,7 @@ func fetchUser(c *gin.Context) {
 	var user User       //定义User结构体
 	ID := c.Param("id") //获取参数id
 
-	db.First(&user, ID)
+	getDb().First(&user, ID)
 
 	if user.ID == 0 { //如果用户不存在，则返回
 		c.JSON(http.StatusNotFound,
@@ -149,9 +177,9 @@ func fetchUser(c *gin.Context) {
 
 //更新用户
 func updateUser(c *gin.Context) {
-	var user User           //定义User结构体
-	userID := c.Param("id") //获取参数id
-	db.First(&user, userID) //查找数据库
+	var user User                //定义User结构体
+	userID := c.Param("id")      //获取参数id
+	getDb().First(&user, userID) //查找数据库
 
 	if user.ID == 0 { //如果数据库不存在，则返回
 		c.JSON(http.StatusNotFound,
@@ -160,8 +188,8 @@ func updateUser(c *gin.Context) {
 	}
 
 	//更新对应的字段值
-	db.Model(&user).Update("phone", c.PostForm("phone"))
-	db.Model(&user).Update("name", c.PostForm("name"))
+	getDb().Model(&user).Update("phone", c.PostForm("phone"))
+	getDb().Model(&user).Update("name", c.PostForm("name"))
 	c.JSON(http.StatusOK,
 		gin.H{"status": http.StatusOK, "message": "Updated User successfully!"})
 }
@@ -171,7 +199,7 @@ func deleteUser(c *gin.Context) {
 	var user User           //定义User结构体
 	userID := c.Param("id") //获取参数id
 
-	db.First(&user, userID) //查找数据库
+	getDb().First(&user, userID) //查找数据库
 
 	if user.ID == 0 { //如果数据库不存在，则返回
 		c.JSON(http.StatusNotFound,
@@ -180,7 +208,7 @@ func deleteUser(c *gin.Context) {
 	}
 
 	//删除用户
-	db.Delete(&user)
+	getDb().Delete(&user)
 	c.JSON(http.StatusOK,
 		gin.H{"status": http.StatusOK, "message": "User deleted successfully!"})
 }
